@@ -1,0 +1,5 @@
+entry_points:
+    main:
+        parameters:
+            some_param: string
+        command: "python3 main.py --some_param {some_param}"
