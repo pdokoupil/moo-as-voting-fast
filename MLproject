@@ -1,5 +1,9 @@
 entry_points:
     main:
         parameters:
-            some_param: string
-        command: "python3 main.py --some_param {some_param}"
+            k: {type: int, default: 10}
+            train_path: path
+            test_path: path
+            seed: {type: int, default: 1}
+            weights: {type: string, default: "0.3,0.3,0.3"}
+        command: "python3 main.py --k {k} --train_path {train_path} --test_path {test_path} --seed {seed} --weights {weights}"
