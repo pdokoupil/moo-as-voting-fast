@@ -6,70 +6,38 @@ from matplotlib.pyplot import axes
 
 import numpy as np
 
+from mandate_allocation.exactly_proportional_fuzzy_dhondt import exactly_proportional_fuzzy_dhondt
+from mandate_allocation.exactly_proportional_fuzzy_dhondt_2 import exactly_proportional_fuzzy_dhondt_2
+from mandate_allocation.fai_strategy import fai_strategy
+from mandate_allocation.probabilistic_fai_strategy import probabilistic_fai_strategy
+from mandate_allocation.weighted_average_strategy import weighted_average_strategy
+
 from normalization.cdf import cdf
 from normalization.standardization import standardization
 from normalization.identity import identity
+
+from support.rating_based_relevance_support import rating_based_relevance_support
+from support.intra_list_diversity_support import intra_list_diversity_support
+from support.popularity_complement_support import popularity_complement_support
 
 from mlflow import log_metric, log_param, log_artifacts, log_artifact, set_tracking_uri, set_experiment, start_run
 
 from caserec.utils.process_data import ReadFile
 
+from caserec.recommenders.rating_prediction.itemknn import ItemKNN
 from caserec.recommenders.rating_prediction.matrixfactorization import MatrixFactorization
 from caserec.recommenders.rating_prediction.base_rating_prediction import BaseRatingPrediction
 
-# Returns np.array with shape num_users x num_items which has meaning of support of item for user at step k
-def relevance_supports(rating_matrix):
-    return rating_matrix # simple
-
-# users_viewed_item is np.array with length == #of items where each entry corresponds
-# to the number of users who seen the particular item
-def novelty_supports(users_viewed_item, num_users):
-    return 1.0 - (users_viewed_item / num_users) # + proper expand_dims to ensure broadcasting
-
-# old_obj_values are diversityy values for lists of length k - 1
-def diversity_support(users_partial_lists, items, distance_matrix, k):
-    # return ((old_obj_values * (k - 1)) + (distance_matrix[users_partial_list, item].sum() * 2)) / k
-
-    # diversities between single top_k list an array of items (so per user)
-    # distance_matrix[indices[:,np.newaxis], item_indices].sum(axis=0)
-
-    # for multiple users we just work with rank 3 tensors .. results is 2d where first axis is user
-    # expanding dims via newaxis is needed, alternative is to use d[rows][:,cols] syntax or np.ix_, however, both seems
-    # to be slower
-    #return ((old_obj_values * (k - 1)) + (distance_matrix[top_k_lists[:,:,np.newaxis], [1, 3]].sum(axis=1) * 2)) / k
-    
-    if k == 1:
-        return np.repeat(np.expand_dims(distance_matrix.sum(axis=1), axis=0), users_partial_lists.shape[0], axis=0) / (distance_matrix.shape[0] - 1)
-        #return np.repeat(distance_matrix[np.newaxis, items].sum(axis=1) / (distance_matrix.shape[0] - 1), users_partial_lists.shape[0], axis=0)
-    elif k == 2:
-        #old_supp = np.expand_dims(distance_matrix.sum(axis=1), axis=0) / (distance_matrix.shape[0] - 1)
-        old_supp = distance_matrix[users_partial_lists[:, 0]].sum(axis=1, keepdims=True) / (distance_matrix.shape[0] - 1) # TODO remove, probably not necessary as it is constant per user
-        #return distance_matrix[users_partial_lists[:,:k-1,np.newaxis], items].sum(axis=1) / (k - 1) - old_supp
-        return 2 * distance_matrix[users_partial_lists[:,:k-1,np.newaxis], items].sum(axis=1) / k - old_supp
-        
-        # sups = np.zeros((users_partial_lists.shape[0], distance_matrix.shape[0]), dtype=np.float64)
-        # for u in range(sups.shape[0]):
-        #     old_supp = distance_matrix[users_partial_lists[u, 0]].sum() / (distance_matrix.shape[0] - 1)
-        #     for i in items:
-        #         user_top_k = np.concatenate([users_partial_lists[u, :k-1], [i]])
-        #         sups[u, i] = distance_matrix[np.ix_(user_top_k, user_top_k)].sum() / k - old_supp
-        # #return distance_matrix[users_partial_lists[:,:k-1,np.newaxis], users_partial_lists[:,:k-1]].sum() / k - old_supp
-        # return sups
-    return distance_matrix[users_partial_lists[:,:k-1,np.newaxis], items].sum(axis=1) / (k - 1)
-
 def get_supports(users_partial_lists, items, extended_rating_matrix, distance_matrix, users_viewed_item, k):
-    rel_supps = relevance_supports(extended_rating_matrix)
-    #print(f"Diversity supports (shape={rel_supps.shape}): {rel_supps}")
-    div_supps = diversity_support(users_partial_lists, items, distance_matrix, k)
-    #print(f"Relevance supports (shape={div_supps.shape}): {div_supps}")
-    nov_supps = np.repeat(novelty_supports(users_viewed_item, num_users=users_partial_lists.shape[0])[np.newaxis, :], users_partial_lists.shape[0], axis=0)
-    #print(f"Novelty supports (shape={nov_supps.shape}): {nov_supps}")
-
+    rel_supps = rating_based_relevance_support(extended_rating_matrix)
+    div_supps = intra_list_diversity_support(users_partial_lists, items, distance_matrix, k)
+    nov_supps = popularity_complement_support(users_viewed_item, num_users=users_partial_lists.shape[0])
     return np.stack([rel_supps, div_supps, nov_supps])
 
-def get_baseline(args):
-    baseline = MatrixFactorization(args.train_path)
-    
+def get_baseline(args, baseline_factory):
+    print(f"Getting baseline '{baseline_factory.__name__}'")
+    baseline = baseline_factory(args.train_path)
+
     BaseRatingPrediction.compute(baseline)
     baseline.init_model()
     baseline.fit()
@@ -77,7 +45,7 @@ def get_baseline(args):
     similarity_matrix = baseline.compute_similarity(transpose=True)
 
     train_set = baseline.train_set
-    
+
     num_items = len(train_set['items'])
     num_users = len(train_set['users'])
 
@@ -106,110 +74,6 @@ def get_baseline(args):
     test_set = ReadFile(args.test_path).read()
     
     return items, users, users_viewed_item, item_to_item_id, item_id_to_item, extended_rating_matrix, similarity_matrix, unseen_items_mask
-    
-
-class batched_fai_strategy:
-    def __init__(self):
-        self.curr_obj = 1
-
-    def __call__(self, masked_supports):
-        res = np.argmax(masked_supports[self.curr_obj], axis=1)
-        #self.curr_obj = (self.curr_obj + 1) % supports.shape[0]
-        return res
-
-class batched_weighted_average_strategy:
-    def __init__(self, obj_weights):
-        self.obj_weights = obj_weights[:, np.newaxis, np.newaxis]
-
-    def __call__(self, masked_supports):
-        return np.argmax(np.sum(masked_supports * self.obj_weights, axis=0), axis=1)
-
-class batched_probabilistic_fai_strategy:
-    def __init__(self, obj_weights):
-        self.obj_weights = obj_weights
-
-    # supports.shape[0] corresponds to number of objectives
-    def __call__(self, masked_supports):
-        curr_obj = np.random.choice(np.arange(masked_supports.shape[0]), p=self.obj_weights)
-        return np.argmax(masked_supports[curr_obj], axis=1)
-
-class batched_exactly_proportional_fuzzy_dhondt:
-    def __init__(self, obj_weights):
-        self.tot = None
-        self.s_r = None
-        self.votes = (obj_weights / obj_weights.sum())[:, np.newaxis, np.newaxis] # properly expand dims
-
-    def __call__(self, mask, supports):
-        masked_supports_neg = (mask * supports + (~mask) * args.masking_value)
-        masked_supports = mask * supports
-        if self.tot is None:
-            # Shape should be [num_users, 1]
-            self.tot = np.zeros((masked_supports.shape[1]), dtype=np.float64)
-            # Shape is [num_parties, num_users]
-            self.s_r = np.zeros((masked_supports.shape[0], masked_supports.shape[1]), dtype=np.float64)
-
-        # shape [num_users, num_items]
-        tot_items = np.full((1, masked_supports.shape[1], masked_supports.shape[2]), self.tot[:, np.newaxis])
-        tot_items += np.sum(masked_supports, axis=0)
-
-        # Shape of e_r should be [num_objs, num_users, num_items]
-        e_r = np.maximum(0.0, tot_items * self.votes - self.s_r[..., np.newaxis])
-        # Shape should be [num_users, num_items]
-        gain_items = np.minimum(masked_supports_neg, e_r).sum(axis=0) #np.minimum(masked_supports, e_r).sum(axis=0)
-
-        # Shape should be [num_users,]
-        max_gain_items = np.argmax(gain_items, axis=1)
-
-        self.s_r += np.squeeze(np.take_along_axis(masked_supports, max_gain_items[np.newaxis, :, np.newaxis], axis=2))
-        self.tot = self.s_r.sum(axis=0)
-
-        return max_gain_items
-
-class batched_exactly_proportional_fuzzy_dhondt_2:
-    def __init__(self, obj_weights):
-        self.tot = None
-        self.s_r = None
-        self.votes = (obj_weights / obj_weights.sum())[:, np.newaxis, np.newaxis] # properly expand dims
-
-    def __call__(self, mask, supports):
-        masked_supports_neg = (mask * supports + (~mask) * args.masking_value)
-        masked_supports = mask * supports
-        if self.tot is None:
-            # Shape should be [num_users, 1]
-            self.tot = np.zeros((masked_supports.shape[1]), dtype=np.float64)
-            # Shape is [num_parties, num_users]
-            self.s_r = np.zeros((masked_supports.shape[0], masked_supports.shape[1]), dtype=np.float64)
-
-        # shape [num_users, num_items]
-        tot_items = np.full((1, masked_supports.shape[1], masked_supports.shape[2]), self.tot[:, np.newaxis])
-        tot_items += np.sum(np.maximum(0.0, masked_supports), axis=0)
-
-        # Shape of e_r should be [num_objs, num_users, num_items]
-        unused_p = tot_items * self.votes - self.s_r[..., np.newaxis]
-        
-        positive_support_mask = masked_supports_neg >= 0.0
-        negative_support_mask = masked_supports_neg < 0.0
-        gain_items = np.zeros_like(masked_supports, dtype=np.float64)
-        gain_items[positive_support_mask] = np.maximum(0, np.minimum(masked_supports_neg[positive_support_mask], unused_p[positive_support_mask]))
-        #np.put(gain_items, positive_support_mask, np.maximum(0, np.minimum(np.take(masked_supports, positive_support_mask), unused_p)))
-        gain_items[negative_support_mask] = np.minimum(0, masked_supports_neg[negative_support_mask] - unused_p[negative_support_mask])
-        #np.put(gain_items, negative_support_mask, np.minimum(0, np.take(masked_supports, negative_support_mask) - unused_p))
-
-        # Shape should be [num_users, num_items]
-        gain_items = gain_items.sum(axis=0)
-
-        # Shape should be [num_users,]
-        #max_gain_items = np.argmax(gain_items, axis=1)
-        max_gains = np.max(gain_items, axis=1, keepdims=True)
-        #all_max_gain_items = np.where(gain_items < max_gains)
-        # Break ties by selecting items with maximal tot_items
-        max_gain_items = np.argmax(np.where(gain_items == max_gains, np.squeeze(tot_items), np.NINF), axis=1)
-
-        self.s_r += np.squeeze(np.take_along_axis(masked_supports, max_gain_items[np.newaxis, :, np.newaxis], axis=2))
-        self.tot = np.where(self.s_r >= 0, self.s_r, 0).sum(axis=0) # TODO NEW
-        # self.tot = self.s_r.sum(axis=0)
-
-        return max_gain_items
 
 def prepare_normalization(normalization_factory, rating_matrix, distance_matrix, users_viewed_item):
     num_users = rating_matrix.shape[0]
@@ -351,10 +215,10 @@ def main(args):
         print(f"Using {args.normalization} normalization")
         normalization_factory = globals()[args.normalization]
 
-    algorithm_factory = globals()[f"batched_{args.algorithm}"]
-    print(f"Using 'batched_{args.algorithm}' algorithm")
+    algorithm_factory = globals()[args.algorithm]
+    print(f"Using '{args.algorithm}' algorithm")
 
-    items, users, users_viewed_item, item_to_item_id, item_id_to_item, extended_rating_matrix, similarity_matrix, unseen_items_mask = get_baseline(args)
+    items, users, users_viewed_item, item_to_item_id, item_id_to_item, extended_rating_matrix, similarity_matrix, unseen_items_mask = get_baseline(args, globals()[args.baseline])
     distance_matrix = 1.0 - similarity_matrix
     #extended_rating_matrix = (extended_rating_matrix - 1.0) / 4.0
 
@@ -368,7 +232,7 @@ def main(args):
     
     obj_weights = args.weights
     obj_weights /= obj_weights.sum()
-    mandate_allocation = algorithm_factory(obj_weights)
+    mandate_allocation = algorithm_factory(obj_weights, args.masking_value)
 
     start_time = time.perf_counter()
 
@@ -412,6 +276,7 @@ if __name__ == "__main__":
     parser.add_argument("--normalization", type=str, default="standardization")
     parser.add_argument("--algorithm", type=str, default="exactly_proportional_fuzzy_dhondt_2")
     parser.add_argument("--masking_value", type=float, default=-1e6)
+    parser.add_argument("--baseline", type=str, default="MatrixFactorization")
     args = parser.parse_args()
 
     args.weights = np.fromiter(map(float, args.weights.split(",")), dtype=np.float32)
@@ -419,10 +284,4 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
     random.seed(args.seed)
 
-    #set_tracking_uri("http://gpulab.ms.mff.cuni.cz:7022")
-    #set_experiment("moo-as-voting-fast")
-    
-    #with start_run():
     main(args)
-
-
