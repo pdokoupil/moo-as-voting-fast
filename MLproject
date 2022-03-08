@@ -8,4 +8,5 @@ entry_points:
             weights: {type: string, default: "0.3,0.3,0.3"}
             normalization: string
             algorithm: string
-        command: "python3 main.py --k {k} --train_path {train_path} --test_path {test_path} --seed {seed} --weights {weights} --normalization {normalization} --algorithm {algorithm}"
+            diversity: string
+        command: "python3 main.py --k {k} --train_path {train_path} --test_path {test_path} --seed {seed} --weights {weights} --normalization {normalization} --algorithm {algorithm} --diversity {diversity}"

@@ -6,6 +6,8 @@ from matplotlib.pyplot import axes
 
 import numpy as np
 
+from scipy.spatial.distance import squareform, pdist
+
 from mandate_allocation.exactly_proportional_fuzzy_dhondt import exactly_proportional_fuzzy_dhondt
 from mandate_allocation.exactly_proportional_fuzzy_dhondt_2 import exactly_proportional_fuzzy_dhondt_2
 from mandate_allocation.fai_strategy import fai_strategy
@@ -15,6 +17,7 @@ from mandate_allocation.weighted_average_strategy import weighted_average_strate
 from normalization.cdf import cdf
 from normalization.standardization import standardization
 from normalization.identity import identity
+from normalization.robust_scaler import robust_scaler
 
 from support.rating_based_relevance_support import rating_based_relevance_support
 from support.intra_list_diversity_support import intra_list_diversity_support
@@ -33,6 +36,36 @@ def get_supports(users_partial_lists, items, extended_rating_matrix, distance_ma
     div_supps = intra_list_diversity_support(users_partial_lists, items, distance_matrix, k)
     nov_supps = popularity_complement_support(users_viewed_item, num_users=users_partial_lists.shape[0])
     return np.stack([rel_supps, div_supps, nov_supps])
+
+# Parse movielens metadata
+def parse_metadata(metadata_path, item_to_item_id):
+    metadata = dict()
+
+    with open(metadata_path, encoding="ISO-8859-1") as f:
+        all_genres = set()
+        for line in f.readlines():
+            [movie, movie_name, genres] = line.strip().split("::")
+            genres = genres.split("|")
+            all_genres.update(genres)
+            metadata[int(movie)] = {
+                "movie_name": movie_name,
+                "genres": genres
+            }
+        
+        genre_to_genre_id = {g:i for i, g in enumerate(all_genres)}
+        metadata_matrix = np.zeros((len(item_to_item_id), len(all_genres)), dtype=np.int32)
+        for movie, data in metadata.items():
+            if movie not in item_to_item_id:
+                continue
+            item_id = item_to_item_id[movie]
+            for g in data["genres"]:
+                metadata_matrix[item_id, genre_to_genre_id[g]] = 1
+
+    metadata_distances = np.float32(squareform(pdist(metadata_matrix, "cosine")))
+    metadata_distances[np.isnan(metadata_distances)] = 1.0
+    #metadata_matrix = 1.0 - metadata_matrix
+
+    return metadata_distances
 
 def get_baseline(args, baseline_factory):
     print(f"Getting baseline '{baseline_factory.__name__}'")
@@ -71,14 +104,50 @@ def get_baseline(args, baseline_factory):
         item_id_to_item[idx] = item
         users_viewed_item[idx] = len(train_set['users_viewed_item'][item])
 
+    user_to_user_id = dict()
+    user_id_to_user = dict()
+
+    for idx, user in enumerate(train_set['users']):
+        user_to_user_id[user] = idx
+        user_id_to_user[idx] = user
+
     test_set = ReadFile(args.test_path).read()
-    
-    return items, users, users_viewed_item, item_to_item_id, item_id_to_item, extended_rating_matrix, similarity_matrix, unseen_items_mask
+    test_set_users = []
+
+    test_set_users_start_index = 0
+    next_user_idx = len(train_set['users'])
+    for u in test_set['users']:
+        if u not in user_to_user_id:
+            print(f"Test set contains so-far-unknown user: {u}, assigning id: {next_user_idx}")
+            if test_set_users_start_index == 0:
+                test_set_users_start_index = next_user_idx
+            user_to_user_id[u] = next_user_idx
+            user_id_to_user[next_user_idx] = u
+            user_estimated_rating = extended_rating_matrix.mean(axis=0, keepdims=True)
+            extended_rating_matrix = np.concatenate([extended_rating_matrix, user_estimated_rating], axis=0)            
+            unseen_items_mask = np.concatenate([unseen_items_mask, np.ones((1, num_items), dtype=np.bool8)])
+            next_user_idx += 1
+
+        test_set_users.append(user_to_user_id[u])
+        
+    metadata_distance_matrix = None
+    if args.metadata_path:
+        print("Parsing metadata")
+        metadata_distance_matrix = parse_metadata(args.metadata_path, item_to_item_id)
+
+    users = np.arange(extended_rating_matrix.shape[0]) # re-evaluate users because there can be new users in test set
+
+    return items, users, \
+        users_viewed_item, item_to_item_id, \
+        item_id_to_item, extended_rating_matrix, \
+        similarity_matrix, unseen_items_mask, \
+        test_set_users_start_index, metadata_distance_matrix
 
 def prepare_normalization(normalization_factory, rating_matrix, distance_matrix, users_viewed_item):
     num_users = rating_matrix.shape[0]
 
     relevance_data_points = rating_matrix.T
+    print(relevance_data_points.mean(axis=1))
     
     upper_triangular_indices = np.triu_indices(distance_matrix.shape[0], k=1)
     upper_triangular_nonzero = distance_matrix[upper_triangular_indices]
@@ -218,8 +287,15 @@ def main(args):
     algorithm_factory = globals()[args.algorithm]
     print(f"Using '{args.algorithm}' algorithm")
 
-    items, users, users_viewed_item, item_to_item_id, item_id_to_item, extended_rating_matrix, similarity_matrix, unseen_items_mask = get_baseline(args, globals()[args.baseline])
-    distance_matrix = 1.0 - similarity_matrix
+    items, users, users_viewed_item, item_to_item_id, item_id_to_item, extended_rating_matrix, similarity_matrix, unseen_items_mask, test_set_users_start_index, metadata_distance_matrix = get_baseline(args, globals()[args.baseline])
+    if args.diversity == "cb":
+        print("Using content based diversity")
+        distance_matrix = metadata_distance_matrix
+    elif args.diversity == "cf":
+        print("Using collaborative diversity")
+        distance_matrix = 1.0 - similarity_matrix
+    else:
+        assert False, f"Unknown diversity: {args.diversity}"
     #extended_rating_matrix = (extended_rating_matrix - 1.0) / 4.0
 
     # Prepare normalizations
@@ -261,22 +337,26 @@ def main(args):
         users_partial_lists[:, i] = mandate_allocation(mask, supports)
 
     print(f"### Whole prediction took: {time.perf_counter() - start_time} ###")
-    print(f"Lists: {users_partial_lists[1]}")
-    print(f"Mapped lists: {[item_id_to_item[item_id] for item_id in users_partial_lists[1]]}")
-    print(f"Lists ratings: {extended_rating_matrix[1, users_partial_lists[1]]}")
+    print(f"Lists: {users_partial_lists}")
+    print(f"Item ID to Item: {item_id_to_item.items()}")
+    #print(f"Mapped lists: {[item_id_to_item[item_id] for item_id in users_partial_lists[1]]}")
+    #print(f"Lists ratings: {extended_rating_matrix[1, users_partial_lists[1]]}")
+
     custom_evaluate_voting(users_partial_lists, extended_rating_matrix, distance_matrix, users_viewed_item, normalizations)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--k", type=int, default=10)
-    parser.add_argument("--train_path", type=str, default="/Users/pdokoupil/Downloads/ml-100k-folds/newlightfmfolds/0/train.dat")
-    parser.add_argument("--test_path", type=str, default="/Users/pdokoupil/Downloads/ml-100k-folds/newlightfmfolds/0/test.dat")
+    parser.add_argument("--train_path", type=str, default="/Users/pdokoupil/Downloads/filmtrust-folds/randomfilmtrustfolds/0/train.dat")
+    parser.add_argument("--test_path", type=str, default="/Users/pdokoupil/Downloads/filmtrust-folds/randomfilmtrustfolds/0/test.dat")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--weights", type=str, default="0.3,0.3,0.3")
     parser.add_argument("--normalization", type=str, default="standardization")
     parser.add_argument("--algorithm", type=str, default="exactly_proportional_fuzzy_dhondt_2")
     parser.add_argument("--masking_value", type=float, default=-1e6)
     parser.add_argument("--baseline", type=str, default="MatrixFactorization")
+    parser.add_argument("--metadata_path", type=str, default="/Users/pdokoupil/Downloads/ml-1m/movies.dat")
+    parser.add_argument("--diversity", type=str, default="cf")
     args = parser.parse_args()
 
     args.weights = np.fromiter(map(float, args.weights.split(",")), dtype=np.float32)
