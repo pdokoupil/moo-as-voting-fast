@@ -143,7 +143,13 @@ def get_baseline(args, baseline_factory):
         similarity_matrix, unseen_items_mask, \
         test_set_users_start_index, metadata_distance_matrix
 
-def prepare_normalization(normalization_factory, rating_matrix, distance_matrix, users_viewed_item):
+def build_normalization(normalization_factory, shift):
+    if shift:
+        return normalization_factory(shift)
+    else:
+        return normalization_factory()
+
+def prepare_normalization(normalization_factory, rating_matrix, distance_matrix, users_viewed_item, shift):
     num_users = rating_matrix.shape[0]
 
     relevance_data_points = rating_matrix.T
@@ -155,13 +161,13 @@ def prepare_normalization(normalization_factory, rating_matrix, distance_matrix,
     diversity_data_points = np.expand_dims(upper_triangular_nonzero, axis=1)
     novelty_data_points = np.expand_dims(1.0 - users_viewed_item / num_users, axis=1)
 
-    norm_relevance = normalization_factory()
+    norm_relevance = build_normalization(normalization_factory, shift)
     norm_relevance.train(relevance_data_points)
     
-    norm_diversity = normalization_factory()
+    norm_diversity = build_normalization(normalization_factory, shift)
     norm_diversity.train(diversity_data_points)
 
-    norm_novelty = normalization_factory()
+    norm_novelty = build_normalization(normalization_factory, shift)
     norm_novelty.train(novelty_data_points)
 
     return [norm_relevance, norm_diversity, norm_novelty]
@@ -300,7 +306,7 @@ def main(args):
 
     # Prepare normalizations
     start_time = time.perf_counter()
-    normalizations = prepare_normalization(normalization_factory, extended_rating_matrix, distance_matrix, users_viewed_item)
+    normalizations = prepare_normalization(normalization_factory, extended_rating_matrix, distance_matrix, users_viewed_item, args.shift)
     print(f"Preparing normalizations took: {time.perf_counter() - start_time}")
 
     num_users = users.size
@@ -357,6 +363,7 @@ if __name__ == "__main__":
     parser.add_argument("--baseline", type=str, default="MatrixFactorization")
     parser.add_argument("--metadata_path", type=str, default="/Users/pdokoupil/Downloads/ml-1m/movies.dat")
     parser.add_argument("--diversity", type=str, default="cf")
+    parser.add_argument("--shift", type=float, default=None)
     args = parser.parse_args()
 
     args.weights = np.fromiter(map(float, args.weights.split(",")), dtype=np.float32)

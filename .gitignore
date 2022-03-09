@@ -1,1 +1,3 @@
 mlruns
+*.pyc
+__pycache__

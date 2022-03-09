@@ -9,4 +9,12 @@ entry_points:
             normalization: string
             algorithm: string
             diversity: string
-        command: "python3 main.py --k {k} --train_path {train_path} --test_path {test_path} --seed {seed} --weights {weights} --normalization {normalization} --algorithm {algorithm} --diversity {diversity}"
+            metadata_path: {type: string, default: ""}
+            baseline: string
+            shift: float
+        command: "python3 main.py \
+            --k {k} --train_path {train_path} --test_path {test_path} \
+            --seed {seed} --weights {weights} --normalization {normalization} \
+            --algorithm {algorithm} --diversity {diversity} \
+            --metadata_path {metadata_path} --baseline {baseline} \
+            --shift {shift}"
