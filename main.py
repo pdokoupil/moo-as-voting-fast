@@ -2,7 +2,6 @@ import argparse
 import os
 import random
 import time
-from matplotlib.pyplot import axes
 
 import numpy as np
 
@@ -13,11 +12,13 @@ from mandate_allocation.exactly_proportional_fuzzy_dhondt_2 import exactly_propo
 from mandate_allocation.fai_strategy import fai_strategy
 from mandate_allocation.probabilistic_fai_strategy import probabilistic_fai_strategy
 from mandate_allocation.weighted_average_strategy import weighted_average_strategy
+from mandate_allocation.sainte_lague_method import sainte_lague_method
 
 from normalization.cdf import cdf
 from normalization.standardization import standardization
 from normalization.identity import identity
 from normalization.robust_scaler import robust_scaler
+from normalization.cdf_threshold_shift import cdf_threshold_shift
 
 from support.rating_based_relevance_support import rating_based_relevance_support
 from support.intra_list_diversity_support import intra_list_diversity_support
@@ -163,10 +164,8 @@ def prepare_normalization(normalization_factory, rating_matrix, distance_matrix,
 
     norm_relevance = build_normalization(normalization_factory, shift)
     norm_relevance.train(relevance_data_points)
-    
     norm_diversity = build_normalization(normalization_factory, shift)
     norm_diversity.train(diversity_data_points)
-
     norm_novelty = build_normalization(normalization_factory, shift)
     norm_novelty.train(novelty_data_points)
 

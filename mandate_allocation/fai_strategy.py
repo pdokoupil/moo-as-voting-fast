@@ -1,10 +1,12 @@
 import numpy as np
 
 class fai_strategy:
-    def __init__(self, *args):
+    def __init__(self, masking_value, *args):
         self.curr_obj = 1
+        self.masking_value = masking_value
 
-    def __call__(self, masked_supports):
-        res = np.argmax(masked_supports[self.curr_obj], axis=1)
-        self.curr_obj = (self.curr_obj + 1) % masked_supports.shape[0]
+    def __call__(self, mask, supports):
+        masked_supports_neg = (mask * supports + (~mask) * self.masking_value)
+        res = np.argmax(masked_supports_neg[self.curr_obj], axis=1)
+        self.curr_obj = (self.curr_obj + 1) % masked_supports_neg.shape[0]
         return res
