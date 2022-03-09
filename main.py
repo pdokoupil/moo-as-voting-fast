@@ -222,7 +222,7 @@ def custom_evaluate_voting(top_k, rating_matrix, distance_matrix, users_viewed_i
     normalized_per_user_diversity = []
     normalized_per_user_novelty = []
 
-    normalized_per_user_mer_matrix = mer_norm(np.mean(np.take_along_axis(rating_matrix, top_k, axis=1), axis=1, keepdims=True).T).T
+    normalized_per_user_mer_matrix = mer_norm(np.mean(np.take_along_axis(rating_matrix, top_k, axis=1), axis=1, keepdims=True).T, ignore_shift=True).T
 
     # Calculate normalized MER per user
     n = 0
@@ -241,10 +241,10 @@ def custom_evaluate_voting(top_k, rating_matrix, distance_matrix, users_viewed_i
         
         upper_triangular = np.triu(distance_matrix[np.ix_(user_ranking, user_ranking)], k=1)
         upper_triangular_nonzero_mean = upper_triangular.sum() / ((upper_triangular.size - upper_triangular.shape[0]) / 2)
-        normalized_per_user_diversity.append(div_norm(upper_triangular_nonzero_mean.reshape(-1, 1)))
+        normalized_per_user_diversity.append(div_norm(upper_triangular_nonzero_mean.reshape(-1, 1), ignore_shift=True))
         normalized_diversity += normalized_per_user_diversity[-1]
 
-        normalized_per_user_novelty.append(nov_norm((1.0 - users_viewed_item[user_ranking] / num_users).mean().reshape(-1, 1)))
+        normalized_per_user_novelty.append(nov_norm((1.0 - users_viewed_item[user_ranking] / num_users).mean().reshape(-1, 1), ignore_shift=True))
         normalized_novelty += normalized_per_user_novelty[-1]
 
         per_user_mer.append(relevance)
