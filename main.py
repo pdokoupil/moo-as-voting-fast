@@ -372,6 +372,7 @@ def main(args):
     items, users, users_viewed_item, item_to_item_id, item_id_to_item, extended_rating_matrix, similarity_matrix, unseen_items_mask, test_set_users_start_index, metadata_distance_matrix = get_baseline(args, globals()[args.baseline])
     if args.diversity == "cb":
         print("Using content based diversity")
+        assert args.metadata_path, "Metadata path must be specified when using cb diversity"
         distance_matrix = metadata_distance_matrix
     elif args.diversity == "cf":
         print("Using collaborative diversity")
@@ -426,7 +427,8 @@ def main(args):
 
     custom_evaluate_voting(users_partial_lists, extended_rating_matrix, distance_matrix, users_viewed_item, normalizations, obj_weights)
 
-    log_artifacts(args.artifact_dir)
+    if args.artifact_dir:
+        log_artifacts(args.artifact_dir)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
