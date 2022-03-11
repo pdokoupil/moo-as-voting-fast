@@ -23,7 +23,8 @@ def get_argument_combinations(args):
             "train_path": args.train_path,
             "test_path": args.test_path,
             "metadata_path": args.metadata_path,
-            "cache_dir": args.cache_dir
+            "cache_dir": args.cache_dir,
+            "output_path_prefix": args.output_path_prefix
         }
 
 def main(args):

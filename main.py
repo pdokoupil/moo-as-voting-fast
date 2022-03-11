@@ -453,13 +453,13 @@ if __name__ == "__main__":
 
     if not args.artifact_dir:
         print("Artifact directory is not specified, trying to set it")
-        active_run = os.environ[mlflow.tracking._RUN_ID_ENV_VAR] if mlflow.tracking._RUN_ID_ENV_VAR in os.environ else None
-        if not active_run:
+        run_id = os.environ[mlflow.tracking._RUN_ID_ENV_VAR] if mlflow.tracking._RUN_ID_ENV_VAR in os.environ else None
+        if not run_id:
             print("Not inside mlflow's run, leaving artifact directory empty")
         else:
-            print("Inside mlflow's run, setting artifact directory")
+            print(f"Inside mlflow's run {run_id} setting artifact directory")
             assert args.output_path_prefix, f"Output path '{args.output_path_prefix}' cannot be empty when setting artifact directory"
-            args.artifact_dir = os.path.join(args.output_path_prefix, active_run.info.run_id)
+            args.artifact_dir = os.path.join(args.output_path_prefix, run_id)
             print(f"Set artifact directory to: {args.artifact_dir}")
 
     np.random.seed(args.seed)
