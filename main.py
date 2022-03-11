@@ -179,7 +179,7 @@ def get_baseline(args, baseline_factory):
 
     metadata_distance_matrix = None
     if args.metadata_path:
-        print("Parsing metadata")
+        print(f"Parsing metadata from path: '{args.metadata_path}'")
         metadata_distance_matrix = parse_metadata(args.metadata_path, item_to_item_id)
 
     return items, users, \
