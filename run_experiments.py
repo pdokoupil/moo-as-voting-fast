@@ -28,7 +28,7 @@ def get_argument_combinations(args):
         }
 
 def main(args):
-    args_combinations = get_argument_combinations(args)
+    args_combinations = list(get_argument_combinations(args))
     num_args_combinations = len(args_combinations)
 
     mlflow.set_tracking_uri(args.mlflow_tracking_uri)
