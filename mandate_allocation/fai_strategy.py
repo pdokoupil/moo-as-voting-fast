@@ -1,7 +1,7 @@
 import numpy as np
 
 class fai_strategy:
-    def __init__(self, masking_value, *args):
+    def __init__(self, _, masking_value, *args):
         self.curr_obj = 1
         self.masking_value = masking_value
 
