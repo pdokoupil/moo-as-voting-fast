@@ -6,9 +6,6 @@ import time
 
 from datetime import datetime
 
-from main import main as experiment_entry
-from main import * # We need to populate globals()
-
 import numpy as np
 
 def get_argument_combinations(args):
@@ -73,9 +70,9 @@ if __name__ == "__main__":
     args.weights = [[float(x) for x in w.split(',')] for w in args.weights.split(';')]
     args.seeds = [int(s) for s in args.seeds.split(';')]
     args.shifts = [float(s) for s in args.shifts.split(';')]
-    args.algorithms = [globals()[alg] for alg in args.algorithms.split(';')]
-    args.normalizations = [globals()[norm] for norm in args.normalizations.split(';')]
-    args.baselines = [globals()[baseline] for baseline in args.baselines.split(';')]
-    args.diversities = [globals()[div] for div in args.diversities.split(';')]
+    args.algorithms = [alg for alg in args.algorithms.split(';')]
+    args.normalizations = [norm for norm in args.normalizations.split(';')]
+    args.baselines = [baseline for baseline in args.baselines.split(';')]
+    args.diversities = [div for div in args.diversities.split(';')]
 
     main(args)
