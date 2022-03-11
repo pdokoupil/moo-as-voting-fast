@@ -21,8 +21,8 @@ def get_argument_combinations(args):
             "baseline": baseline,
             "diversity": diversity,
             "experiment_name": args.experiment_name,
-            "train_fold_path": args.train_fold_path,
-            "test_fold_path": args.test_fold_path,
+            "train_path": args.train_path,
+            "test_path": args.test_path,
             "metadata_path": args.metadata_path,
             "cache_dir": args.cache_dir
         }
@@ -52,8 +52,8 @@ if __name__ == "__main__":
     parser.add_argument("--seeds")
     parser.add_argument("--normalizations")
     parser.add_argument("--algorithms")
-    parser.add_argument("--train_fold_path")
-    parser.add_argument("--test_fold_path")
+    parser.add_argument("--train_path")
+    parser.add_argument("--test_path")
     parser.add_argument("--metadata_path")
     parser.add_argument("--baselines")
     parser.add_argument("--diversities")
