@@ -453,7 +453,7 @@ if __name__ == "__main__":
 
     if not args.artifact_dir:
         print("Artifact directory is not specified, trying to set it")
-        active_run = mlflow.active_run()
+        active_run = os.environ[mlflow.tracking._RUN_ID_ENV_VAR] if mlflow.tracking._RUN_ID_ENV_VAR in os.environ else None
         if not active_run:
             print("Not inside mlflow's run, leaving artifact directory empty")
         else:
