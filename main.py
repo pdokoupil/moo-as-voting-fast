@@ -458,9 +458,11 @@ if __name__ == "__main__":
             print("Not inside mlflow's run, leaving artifact directory empty")
         else:
             print(f"Inside mlflow's run {run_id} setting artifact directory")
-            assert args.output_path_prefix, f"Output path '{args.output_path_prefix}' cannot be empty when setting artifact directory"
-            args.artifact_dir = os.path.join(args.output_path_prefix, run_id)
-            print(f"Set artifact directory to: {args.artifact_dir}")
+            if args.output_path_prefix:
+                args.artifact_dir = os.path.join(args.output_path_prefix, run_id)
+                print(f"Set artifact directory to: {args.artifact_dir}")
+            else:
+                print("Output path prefix is not set, skipping setting of artifact directory")
 
     np.random.seed(args.seed)
     random.seed(args.seed)
