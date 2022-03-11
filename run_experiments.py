@@ -63,7 +63,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Modify arguments to correct type and structure
-    args.weights = [[float(x) for x in w.split(',')] for w in args.weights.split(';')]
+    args.weights = [w for w in args.weights.split(';')]
     args.seeds = [int(s) for s in args.seeds.split(';')]
     args.shifts = [float(s) for s in args.shifts.split(';')]
     args.algorithms = [alg for alg in args.algorithms.split(';')]
