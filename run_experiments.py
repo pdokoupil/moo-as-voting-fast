@@ -24,7 +24,7 @@ def get_argument_combinations(args):
             "train_fold_path": args.train_fold_path,
             "test_fold_path": args.test_fold_path,
             "metadata_path": args.metadata_path,
-            "cache_dir": ""
+            "cache_dir": args.cache_dir
         }
 
 def main(args):
@@ -34,9 +34,6 @@ def main(args):
     mlflow.set_tracking_uri(args.mlflow_tracking_uri)
     
     for i, arg_combination in enumerate(args_combinations):
-        if not args.no_cache:
-            arg_combination.cache_dir = f""
-        
         start_time = time.perf_counter()
         start_time_formated = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         print(f"Starting next experiment ({i + 1} out of {num_args_combinations}) at time: {start_time_formated}")
@@ -60,7 +57,7 @@ if __name__ == "__main__":
     parser.add_argument("--metadata_path")
     parser.add_argument("--baselines")
     parser.add_argument("--diversities")
-    parser.add_argument("--no_cache", action="store_true")
+    parser.add_argument("--cache_dir", type=str)
     parser.add_argument("--mlflow_tracking_uri", type=str, default="http://gpulab.ms.mff.cuni.cz:7022")
     parser.add_argument("--output_path_prefix", type=str, default="/mnt/1/outputs")
     parser.add_argument("--mlflow_project_path", type=str, default="/mnt/1/MLproject")
