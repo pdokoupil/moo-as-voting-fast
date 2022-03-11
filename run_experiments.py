@@ -1,4 +1,5 @@
 import argparse
+import os
 import mlflow
 import itertools
 import random
@@ -24,7 +25,8 @@ def get_argument_combinations(args):
             "test_path": args.test_path,
             "metadata_path": args.metadata_path,
             "cache_dir": args.cache_dir,
-            "output_path_prefix": args.output_path_prefix
+            "output_path_prefix": args.output_path_prefix,
+            "artifact_dir": os.path.join(args.output_path_prefix, args.experiment_label)
         }
 
 def main(args):
