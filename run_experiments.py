@@ -60,7 +60,7 @@ if __name__ == "__main__":
     parser.add_argument("--cache_dir", type=str)
     parser.add_argument("--mlflow_tracking_uri", type=str, default="http://gpulab.ms.mff.cuni.cz:7022")
     parser.add_argument("--output_path_prefix", type=str, default="/mnt/1/outputs")
-    parser.add_argument("--mlflow_project_path", type=str, default="/mnt/1/MLproject")
+    parser.add_argument("--mlflow_project_path", type=str, default="/mnt/1")
     args = parser.parse_args()
 
     # Modify arguments to correct type and structure
