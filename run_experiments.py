@@ -36,7 +36,7 @@ def main(args):
         start_time = time.perf_counter()
         start_time_formated = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         print(f"Starting next experiment ({i + 1} out of {num_args_combinations}) at time: {start_time_formated}")
-        run_experiment(args.mlflow_project_path, args.experiment_name, arg_combination)
+        run_experiment(args.mlflow_project_path, args.mlflow_experiment_name, arg_combination)
         print(f"Experiment {i + 1} took {time.perf_counter() - start_time}")
 
 def run_experiment(project_path, experiment_name, args):
@@ -45,7 +45,8 @@ def run_experiment(project_path, experiment_name, args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--experiment_name", type=str, default="moo-as-voting-fast")
+    parser.add_argument("--experiment_label", type=str)
+    parser.add_argument("--mlflow_experiment_name", type=str, default="moo-as-voting-fast")
     parser.add_argument("--weights")
     parser.add_argument("--shifts")
     parser.add_argument("--seeds")
