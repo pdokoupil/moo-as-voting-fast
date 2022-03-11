@@ -69,4 +69,13 @@ if __name__ == "__main__":
     parser.add_argument("--mlflow_project_path", type=str, default="/mnt/1/MLproject")
     args = parser.parse_args()
 
+    # Modify arguments to correct type and structure
+    args.weights = [[float(x) for x in w.split(',')] for w in args.weights.split(';')]
+    args.seeds = [int(s) for s in args.seeds.split(';')]
+    args.shifts = [float(s) for s in args.shifts.split(';')]
+    args.algorithms = [globals()[alg] for alg in args.algorithms.split(';')]
+    args.normalizations = [globals()[norm] for norm in args.normalizations.split(';')]
+    args.baselines = [globals()[baseline] for baseline in args.baselines.split(';')]
+    args.diversities = [globals()[div] for div in args.diversities.split(';')]
+
     main(args)
