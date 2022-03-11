@@ -4,6 +4,8 @@ import pickle
 import random
 import time
 
+import mlflow
+
 import numpy as np
 
 from scipy.spatial.distance import squareform, pdist
@@ -424,6 +426,8 @@ def main(args):
 
     custom_evaluate_voting(users_partial_lists, extended_rating_matrix, distance_matrix, users_viewed_item, normalizations, obj_weights)
 
+    log_artifacts(args.artifact_dir)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--k", type=int, default=10)
@@ -439,9 +443,22 @@ if __name__ == "__main__":
     parser.add_argument("--diversity", type=str, default="cf")
     parser.add_argument("--shift", type=float, default=None)
     parser.add_argument("--cache_dir", type=str)
+    parser.add_argument("--artifact_dir", type=str, default=None)
+    parser.add_argument("--output_path_prefix", type=str, default=None)
     args = parser.parse_args()
 
     args.weights = np.fromiter(map(float, args.weights.split(",")), dtype=np.float32)
+
+    if not args.artifact_dir:
+        print("Artifact directory is not specified, trying to set it")
+        active_run = mlflow.active_run()
+        if not active_run:
+            print("Not inside mlflow's run, leaving artifact directory empty")
+        else:
+            print("Inside mlflow's run, setting artifact directory")
+            assert args.output_path_prefix, f"Output path '{args.output_path_prefix}' cannot be empty when setting artifact directory"
+            args.artifact_dir = os.path.join(args.output_path_prefix, active_run.info.run_id)
+            print(f"Set artifact directory to: {args.artifact_dir}")
 
     np.random.seed(args.seed)
     random.seed(args.seed)
