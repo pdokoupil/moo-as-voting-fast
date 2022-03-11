@@ -20,7 +20,6 @@ def get_argument_combinations(args):
             "algorithm": algorithm,
             "baseline": baseline,
             "diversity": diversity,
-            "experiment_name": args.experiment_name,
             "train_path": args.train_path,
             "test_path": args.test_path,
             "metadata_path": args.metadata_path,
