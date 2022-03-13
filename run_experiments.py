@@ -10,8 +10,8 @@ from datetime import datetime
 import numpy as np
 
 def get_argument_combinations(args):
-    for weights, shift, seed, normalization, algorithm, baseline, diversity in itertools.product(
-        args.weights, args.shifts, args.seeds, args.normalizations, args.algorithms, args.baselines, args.diversities
+    for weights, shift, seed, normalization, algorithm, baseline, diversity, discounts in itertools.product(
+        args.weights, args.shifts, args.seeds, args.normalizations, args.algorithms, args.baselines, args.diversities, args.discounts
     ):
         yield {
             "weights": weights,
@@ -27,7 +27,7 @@ def get_argument_combinations(args):
             "cache_dir": args.cache_dir,
             "output_path_prefix": args.output_path_prefix,
             "artifact_dir": os.path.join(args.output_path_prefix, args.experiment_label),
-            "discounts": args.discounts
+            "discounts": discounts
         }
 
 def main(args):
