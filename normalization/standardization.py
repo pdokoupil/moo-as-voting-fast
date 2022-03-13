@@ -2,7 +2,7 @@ from sklearn.preprocessing import StandardScaler
 
 class standardization:
     def __init__(self, shift=0.0):
-        self.transformer = StandardScaler(copy=False)
+        self.transformer = StandardScaler()
         self.shift = shift
 
     def __call__(self, supports, ignore_shift=False):

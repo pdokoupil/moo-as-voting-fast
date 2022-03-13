@@ -26,7 +26,8 @@ def get_argument_combinations(args):
             "metadata_path": args.metadata_path,
             "cache_dir": args.cache_dir,
             "output_path_prefix": args.output_path_prefix,
-            "artifact_dir": os.path.join(args.output_path_prefix, args.experiment_label)
+            "artifact_dir": os.path.join(args.output_path_prefix, args.experiment_label),
+            "discounts": args.discounts
         }
 
 def main(args):
@@ -64,6 +65,7 @@ if __name__ == "__main__":
     parser.add_argument("--mlflow_tracking_uri", type=str, default="http://gpulab.ms.mff.cuni.cz:7022")
     parser.add_argument("--output_path_prefix", type=str, default="/mnt/1/outputs")
     parser.add_argument("--mlflow_project_path", type=str, default="/mnt/1")
+    parser.add_argument("--discounts", type=str)
     args = parser.parse_args()
 
     # Modify arguments to correct type and structure
@@ -74,5 +76,6 @@ if __name__ == "__main__":
     args.normalizations = [norm for norm in args.normalizations.split(';')]
     args.baselines = [baseline for baseline in args.baselines.split(';')]
     args.diversities = [div for div in args.diversities.split(';')]
+    args.discounts = [disc for disc in args.discounts.split(';')]
 
     main(args)

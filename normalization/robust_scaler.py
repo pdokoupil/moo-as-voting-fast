@@ -2,7 +2,7 @@ from sklearn.preprocessing import RobustScaler
 
 class robust_scaler:
     def __init__(self, shift=0.0):
-        self.transformer = RobustScaler(copy=False)
+        self.transformer = RobustScaler()
         self.shift = shift
 
     def __call__(self, supports, ignore_shift=False):

@@ -2,7 +2,7 @@ from sklearn.preprocessing import QuantileTransformer
 
 class cdf:
     def __init__(self, shift=0.0):
-        self.transformer = QuantileTransformer(copy=False)
+        self.transformer = QuantileTransformer()
         self.shift = shift
 
     def __call__(self, supports, ignore_shift=False):

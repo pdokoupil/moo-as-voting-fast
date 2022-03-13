@@ -229,7 +229,9 @@ def prepare_normalization(args, normalization_factory, rating_matrix, distance_m
 
     return [norm_relevance, norm_diversity, norm_novelty]
 
-def custom_evaluate_voting(top_k, rating_matrix, distance_matrix, users_viewed_item, normalizations, obj_weights):
+def custom_evaluate_voting(top_k, rating_matrix, distance_matrix, users_viewed_item, normalizations, obj_weights, discount_sequences):
+    start_time = time.perf_counter()
+    
     total_mer = 0.0
     total_novelty = 0.0
     total_diversity = 0.0
@@ -241,9 +243,10 @@ def custom_evaluate_voting(top_k, rating_matrix, distance_matrix, users_viewed_i
 
     for user_id, user_ranking in enumerate(top_k):
         
-        relevance = rating_matrix[user_id][user_ranking].sum()
-        novelty = (1.0 - users_viewed_item[user_ranking] / rating_matrix.shape[0]).sum()
-        diversity = distance_matrix[np.ix_(user_ranking, user_ranking)].sum() / user_ranking.size
+        relevance = (rating_matrix[user_id][user_ranking] * discount_sequences[0]).sum()
+        novelty = ((1.0 - users_viewed_item[user_ranking] / rating_matrix.shape[0]) * discount_sequences[2]).sum()
+        div_discount = np.repeat(np.expand_dims(discount_sequences[1], axis=0).T, user_ranking.size, axis=1)
+        diversity = (distance_matrix[np.ix_(user_ranking, user_ranking)] * div_discount).sum() / user_ranking.size
 
         per_user_mer.append(relevance)
         per_user_diversity.append(diversity)
@@ -279,30 +282,56 @@ def custom_evaluate_voting(top_k, rating_matrix, distance_matrix, users_viewed_i
     normalized_per_user_diversity = []
     normalized_per_user_novelty = []
 
-    normalized_per_user_mer_matrix = mer_norm(np.mean(np.take_along_axis(rating_matrix, top_k, axis=1), axis=1, keepdims=True).T, ignore_shift=True).T
+    # Old calculation, was working but not ideal when dealing with discounts
+    # normalized_per_user_mer_matrix = mer_norm(np.mean(np.take_along_axis(rating_matrix, top_k, axis=1) * discount_sequences[0], axis=1, keepdims=True).T, ignore_shift=True).T
+    # New calculation, should be equivalent but easier to deal with discounts
+    # Mean(Discount(Norm(InverseDiscount(i)))) where InverseDiscount is implicitly present in the data
+    # normalized_per_user_mer_matrix = np.mean(mer_norm((np.take_along_axis(rating_matrix, top_k, axis=1) * discount_sequences[0]).T).T * discount_sequences[0], axis=1, keepdims=True)
+    # New 2 calculation
+    normalized_per_user_mer_matrix = mer_norm(np.sum(np.take_along_axis(rating_matrix, top_k, axis=1) * discount_sequences[0], axis=1, keepdims=True).T / discount_sequences[0].sum(), ignore_shift=True).T
+    
 
     # Calculate normalized MER per user
     n = 0
     for user_id, user_ranking in enumerate(top_k):
         
-        relevance = rating_matrix[user_id][user_ranking].sum()
-        novelty = (1.0 - users_viewed_item[user_ranking] / rating_matrix.shape[0]).sum()
-        diversity = distance_matrix[np.ix_(user_ranking, user_ranking)].sum() / user_ranking.size
+        relevance = (rating_matrix[user_id][user_ranking] * discount_sequences[0]).sum()
+        novelty = ((1.0 - users_viewed_item[user_ranking] / rating_matrix.shape[0]) * discount_sequences[2]).sum()
+        div_discount = np.repeat(np.expand_dims(discount_sequences[1], axis=0).T, user_ranking.size, axis=1)
+        diversity = (distance_matrix[np.ix_(user_ranking, user_ranking)] * div_discount).sum() / user_ranking.size
 
-        #normalized_per_user_mer.append(mer_norm[user_id](rating_matrix[user_id, user_ranking].mean().reshape(-1, 1)))
+        # OLD REL
         normalized_per_user_mer.append(normalized_per_user_mer_matrix[user_id].item())
         normalized_mer += normalized_per_user_mer[-1]
 
-        #normalized_per_user_diversity.append(div_norm((distance_matrix[np.ix_(user_ranking, user_ranking)].sum() / 2).mean().reshape(-1, 1)))
-        
-        
-        upper_triangular = np.triu(distance_matrix[np.ix_(user_ranking, user_ranking)], k=1)
-        upper_triangular_nonzero_mean = upper_triangular.sum() / ((upper_triangular.size - upper_triangular.shape[0]) / 2)
-        normalized_per_user_diversity.append(div_norm(upper_triangular_nonzero_mean.reshape(-1, 1), ignore_shift=True).item())
+        # NEW DIV
+        # ranking_distances = distance_matrix[np.ix_(user_ranking, user_ranking)]
+        # normalized_ranking_distances = div_norm(ranking_distances.reshape(-1, 1), ignore_shift=True).reshape(ranking_distances.shape) * div_discount
+        # normalized_per_user_diversity.append(normalized_ranking_distances[np.triu_indices(user_ranking.size, k=1)].mean())
+        # normalized_diversity += normalized_per_user_diversity[-1]
+
+        # New 2 Div
+        ranking_distances = distance_matrix[np.ix_(user_ranking, user_ranking)] * div_discount
+        triu_indices = np.triu_indices(user_ranking.size, k=1)
+        ranking_distances_mean = ranking_distances[triu_indices].sum() / div_discount[triu_indices].sum()
+        normalized_ranking_distances_mean = div_norm([[ranking_distances_mean]], ignore_shift=True)
+        normalized_per_user_diversity.append(normalized_ranking_distances_mean.item())
         normalized_diversity += normalized_per_user_diversity[-1]
 
-        normalized_per_user_novelty.append(nov_norm((1.0 - users_viewed_item[user_ranking] / num_users).mean().reshape(-1, 1), ignore_shift=True).item())
+        # OLD DIV
+        # upper_triangular = np.triu(distance_matrix[np.ix_(user_ranking, user_ranking)] * div_discount, k=1)
+        # upper_triangular_nonzero_mean = upper_triangular.sum() / ((upper_triangular.size - upper_triangular.shape[0]) / 2)
+        # #upper_triangular = distance_matrix[np.ix_(user_ranking, user_ranking)][np.triu_indices(user_ranking.size, k=1)]
+        # normalized_per_user_diversity.append(div_norm(upper_triangular_nonzero_mean.reshape(-1, 1), ignore_shift=True).item())
+        # normalized_diversity += normalized_per_user_diversity[-1]
+
+        # OLD NOV #normalized_per_user_novelty.append(nov_norm(((1.0 - users_viewed_item[user_ranking] / num_users) * discount_sequences[1]).mean().reshape(-1, 1)).item())
+        #old_comp = nov_norm(((1.0 - users_viewed_item[user_ranking] / num_users) * discount_sequences[1]).mean().reshape(-1, 1), ignore_shift=True).item()
+        # NEW NOV #normalized_per_user_novelty.append(np.mean(nov_norm((1.0 - users_viewed_item[user_ranking] / num_users).reshape(-1, 1))[:, 0] * discount_sequences[2]))
+        #normalized_per_user_novelty.append(np.mean([nov_norm([[1.0 - users_viewed_item[i] / num_users]]) for i in user_ranking]))
+        normalized_per_user_novelty.append(nov_norm(((1.0 - users_viewed_item[user_ranking] / num_users) * discount_sequences[2]).sum().reshape(-1, 1) / discount_sequences[2].sum(), ignore_shift=True).item())
         normalized_novelty += normalized_per_user_novelty[-1]
+        #assert np.isclose(normalized_per_user_novelty[-1], old_comp), f"{normalized_per_user_novelty[-1]} must be close to {old_comp}"
 
         per_user_mer.append(relevance)
         per_user_diversity.append(diversity)
@@ -352,7 +381,8 @@ def custom_evaluate_voting(top_k, rating_matrix, distance_matrix, users_viewed_i
     log_metric("mean_absolute_error", mean_absolute_error)
     log_metric("mean_error", mean_error)
 
-    
+    print(f"Evaluation took: {time.perf_counter() - start_time}")
+
 def main(args):
     for arg_name in dir(args):
         if arg_name[0] != '_':
@@ -407,9 +437,9 @@ def main(args):
         # Normalize the supports
         assert supports.shape[0] == 3, "expecting 3 objectives, if updated, update code below"
         
-        supports[0, :, :] = normalizations[0](supports[0].T).T
-        supports[1, :, :] = normalizations[1](supports[1].reshape(-1, 1)).reshape((supports.shape[1], -1))
-        supports[2, :, :] = normalizations[2](supports[2].reshape(-1, 1)).reshape((supports.shape[1], -1))
+        supports[0, :, :] = normalizations[0](supports[0].T).T * args.discount_sequences[0][i]
+        supports[1, :, :] = normalizations[1](supports[1].reshape(-1, 1)).reshape((supports.shape[1], -1)) * args.discount_sequences[1][i]
+        supports[2, :, :] = normalizations[2](supports[2].reshape(-1, 1)).reshape((supports.shape[1], -1)) * args.discount_sequences[2][i]
         
         # Mask out the already recommended items
         np.put_along_axis(mask, users_partial_lists[:, :i], 0, 1)
@@ -425,7 +455,7 @@ def main(args):
     mapped_lists = np.fromiter(map(item_id_to_item.__getitem__, users_partial_lists.flatten()), dtype=np.int32).reshape(users_partial_lists.shape).tolist()
     print(f"Mapped lists: {mapped_lists}")
 
-    custom_evaluate_voting(users_partial_lists, extended_rating_matrix, distance_matrix, users_viewed_item, normalizations, obj_weights)
+    custom_evaluate_voting(users_partial_lists, extended_rating_matrix, distance_matrix, users_viewed_item, normalizations, obj_weights, args.discount_sequences)
 
     if args.artifact_dir:
         log_artifacts(args.artifact_dir)
@@ -437,19 +467,22 @@ if __name__ == "__main__":
     parser.add_argument("--test_path", type=str, default="/Users/pdokoupil/Downloads/filmtrust-folds/randomfilmtrustfolds/0/test.dat")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--weights", type=str, default="0.3,0.3,0.3")
-    parser.add_argument("--normalization", type=str, default="standardization")
+    parser.add_argument("--normalization", type=str, default="cdf_threshold_shift")
     parser.add_argument("--algorithm", type=str, default="exactly_proportional_fuzzy_dhondt_2")
     parser.add_argument("--masking_value", type=float, default=-1e6)
     parser.add_argument("--baseline", type=str, default="MatrixFactorization")
     parser.add_argument("--metadata_path", type=str, default="/Users/pdokoupil/Downloads/ml-1m/movies.dat")
     parser.add_argument("--diversity", type=str, default="cf")
-    parser.add_argument("--shift", type=float, default=None)
-    parser.add_argument("--cache_dir", type=str)
+    parser.add_argument("--shift", type=float, default=-0.1)
+    parser.add_argument("--cache_dir", type=str, default=".")
     parser.add_argument("--artifact_dir", type=str, default=None)
     parser.add_argument("--output_path_prefix", type=str, default=None)
+    parser.add_argument("--discounts", type=str, default="1,1,1")
     args = parser.parse_args()
 
     args.weights = np.fromiter(map(float, args.weights.split(",")), dtype=np.float32)
+    args.discounts = [float(d) for d in args.discounts.split(",")]
+    args.discount_sequences = np.stack([np.geomspace(start=1.0,stop=d**args.k, num=args.k, endpoint=False) for d in args.discounts], axis=0)
 
     if not args.artifact_dir:
         print("Artifact directory is not specified, trying to set it")
