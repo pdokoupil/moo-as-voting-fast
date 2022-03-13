@@ -232,44 +232,6 @@ def prepare_normalization(args, normalization_factory, rating_matrix, distance_m
 def custom_evaluate_voting(top_k, rating_matrix, distance_matrix, users_viewed_item, normalizations, obj_weights, discount_sequences):
     start_time = time.perf_counter()
     
-    total_mer = 0.0
-    total_novelty = 0.0
-    total_diversity = 0.0
-    n = 0
-
-    per_user_mer = []
-    per_user_diversity = []
-    per_user_novelty = []
-
-    for user_id, user_ranking in enumerate(top_k):
-        
-        relevance = (rating_matrix[user_id][user_ranking] * discount_sequences[0]).sum()
-        novelty = ((1.0 - users_viewed_item[user_ranking] / rating_matrix.shape[0]) * discount_sequences[2]).sum()
-        div_discount = np.repeat(np.expand_dims(discount_sequences[1], axis=0).T, user_ranking.size, axis=1)
-        diversity = (distance_matrix[np.ix_(user_ranking, user_ranking)] * div_discount).sum() / user_ranking.size
-
-        per_user_mer.append(relevance)
-        per_user_diversity.append(diversity)
-        per_user_novelty.append(novelty)
-
-        total_mer += relevance
-        total_diversity += diversity
-        total_novelty += novelty
-        n += 1
-        
-    total_mer = total_mer / n
-    total_diversity = total_diversity / n
-    total_novelty = total_novelty / n
-
-    print(f"MEAN ESTIMATED RATING: {total_mer}")
-    print(f"DIVERSITY2: {total_diversity}")
-    print(f"NOVELTY2: {total_novelty}")
-    print("-------------------")
-    log_metric("raw_mer", total_mer)
-    log_metric("raw_diversity", total_diversity)
-    log_metric("raw_novelty", total_novelty)
-
-    
     [mer_norm, div_norm, nov_norm] = normalizations
 
     num_users = top_k.shape[0]    
@@ -282,16 +244,15 @@ def custom_evaluate_voting(top_k, rating_matrix, distance_matrix, users_viewed_i
     normalized_per_user_diversity = []
     normalized_per_user_novelty = []
 
-    # Old calculation, was working but not ideal when dealing with discounts
-    # normalized_per_user_mer_matrix = mer_norm(np.mean(np.take_along_axis(rating_matrix, top_k, axis=1) * discount_sequences[0], axis=1, keepdims=True).T, ignore_shift=True).T
-    # New calculation, should be equivalent but easier to deal with discounts
-    # Mean(Discount(Norm(InverseDiscount(i)))) where InverseDiscount is implicitly present in the data
-    # normalized_per_user_mer_matrix = np.mean(mer_norm((np.take_along_axis(rating_matrix, top_k, axis=1) * discount_sequences[0]).T).T * discount_sequences[0], axis=1, keepdims=True)
-    # New 2 calculation
     normalized_per_user_mer_matrix = mer_norm(np.sum(np.take_along_axis(rating_matrix, top_k, axis=1) * discount_sequences[0], axis=1, keepdims=True).T / discount_sequences[0].sum(), ignore_shift=True).T
     
-
-    # Calculate normalized MER per user
+    total_mer = 0.0
+    total_novelty = 0.0
+    total_diversity = 0.0
+    
+    per_user_mer = []
+    per_user_diversity = []
+    per_user_novelty = []
     n = 0
     for user_id, user_ranking in enumerate(top_k):
         
@@ -300,17 +261,11 @@ def custom_evaluate_voting(top_k, rating_matrix, distance_matrix, users_viewed_i
         div_discount = np.repeat(np.expand_dims(discount_sequences[1], axis=0).T, user_ranking.size, axis=1)
         diversity = (distance_matrix[np.ix_(user_ranking, user_ranking)] * div_discount).sum() / user_ranking.size
 
-        # OLD REL
+        # Per user MER
         normalized_per_user_mer.append(normalized_per_user_mer_matrix[user_id].item())
         normalized_mer += normalized_per_user_mer[-1]
-
-        # NEW DIV
-        # ranking_distances = distance_matrix[np.ix_(user_ranking, user_ranking)]
-        # normalized_ranking_distances = div_norm(ranking_distances.reshape(-1, 1), ignore_shift=True).reshape(ranking_distances.shape) * div_discount
-        # normalized_per_user_diversity.append(normalized_ranking_distances[np.triu_indices(user_ranking.size, k=1)].mean())
-        # normalized_diversity += normalized_per_user_diversity[-1]
-
-        # New 2 Div
+        
+        # Per user Diversity
         ranking_distances = distance_matrix[np.ix_(user_ranking, user_ranking)] * div_discount
         triu_indices = np.triu_indices(user_ranking.size, k=1)
         ranking_distances_mean = ranking_distances[triu_indices].sum() / div_discount[triu_indices].sum()
@@ -318,21 +273,10 @@ def custom_evaluate_voting(top_k, rating_matrix, distance_matrix, users_viewed_i
         normalized_per_user_diversity.append(normalized_ranking_distances_mean.item())
         normalized_diversity += normalized_per_user_diversity[-1]
 
-        # OLD DIV
-        # upper_triangular = np.triu(distance_matrix[np.ix_(user_ranking, user_ranking)] * div_discount, k=1)
-        # upper_triangular_nonzero_mean = upper_triangular.sum() / ((upper_triangular.size - upper_triangular.shape[0]) / 2)
-        # #upper_triangular = distance_matrix[np.ix_(user_ranking, user_ranking)][np.triu_indices(user_ranking.size, k=1)]
-        # normalized_per_user_diversity.append(div_norm(upper_triangular_nonzero_mean.reshape(-1, 1), ignore_shift=True).item())
-        # normalized_diversity += normalized_per_user_diversity[-1]
-
-        # OLD NOV #normalized_per_user_novelty.append(nov_norm(((1.0 - users_viewed_item[user_ranking] / num_users) * discount_sequences[1]).mean().reshape(-1, 1)).item())
-        #old_comp = nov_norm(((1.0 - users_viewed_item[user_ranking] / num_users) * discount_sequences[1]).mean().reshape(-1, 1), ignore_shift=True).item()
-        # NEW NOV #normalized_per_user_novelty.append(np.mean(nov_norm((1.0 - users_viewed_item[user_ranking] / num_users).reshape(-1, 1))[:, 0] * discount_sequences[2]))
-        #normalized_per_user_novelty.append(np.mean([nov_norm([[1.0 - users_viewed_item[i] / num_users]]) for i in user_ranking]))
+        # Per user novelty
         normalized_per_user_novelty.append(nov_norm(((1.0 - users_viewed_item[user_ranking] / num_users) * discount_sequences[2]).sum().reshape(-1, 1) / discount_sequences[2].sum(), ignore_shift=True).item())
         normalized_novelty += normalized_per_user_novelty[-1]
-        #assert np.isclose(normalized_per_user_novelty[-1], old_comp), f"{normalized_per_user_novelty[-1]} must be close to {old_comp}"
-
+        
         per_user_mer.append(relevance)
         per_user_diversity.append(diversity)
         per_user_novelty.append(novelty)
@@ -342,6 +286,9 @@ def custom_evaluate_voting(top_k, rating_matrix, distance_matrix, users_viewed_i
         total_novelty += novelty
         n += 1
 
+    total_mer = total_mer / n
+    total_diversity = total_diversity / n
+    total_novelty = total_novelty / n
 
     normalized_mer = normalized_mer / n
     normalized_diversity = normalized_diversity / n
@@ -354,9 +301,19 @@ def custom_evaluate_voting(top_k, rating_matrix, distance_matrix, users_viewed_i
     print(f"per_user_mean_absolute_errors: {per_user_mean_absolute_errors}")
     print(f"per_user_errors: {per_user_errors}")
 
+    print("####################")
+    print(f"MEAN ESTIMATED RATING: {total_mer}")
+    print(f"DIVERSITY2: {total_diversity}")
+    print(f"NOVELTY2: {total_novelty}")
+    print("--------------------")
+    log_metric("raw_mer", total_mer)
+    log_metric("raw_diversity", total_diversity)
+    log_metric("raw_novelty", total_novelty)
+
     print(f"Normalized MER: {normalized_mer}")
     print(f"Normalized DIVERSITY2: {normalized_diversity}")
     print(f"Normalized NOVELTY2: {normalized_novelty}")
+    print("--------------------")
     log_metric("normalized_mer", normalized_mer)
     log_metric("normalized_diversity", normalized_diversity)
     log_metric("normalized_novelty", normalized_novelty)
@@ -366,6 +323,7 @@ def custom_evaluate_voting(top_k, rating_matrix, distance_matrix, users_viewed_i
     print(f"Sum-To-1 Normalized MER: {normalized_mer / s}")
     print(f"Sum-To-1 Normalized DIVERSITY2: {normalized_diversity / s}")
     print(f"Sum-To-1 Normalized NOVELTY2: {normalized_novelty / s}")
+    print("--------------------")
     log_metric("normalized_sum_to_one_mer", normalized_mer / s)
     log_metric("normalized_sum_to_one_diversity", normalized_diversity / s)
     log_metric("normalized_sum_to_one_novelty", normalized_novelty / s)
@@ -377,6 +335,7 @@ def custom_evaluate_voting(top_k, rating_matrix, distance_matrix, users_viewed_i
     print(f"mean_kl_divergence: {mean_kl_divergence}")
     print(f"mean_absolute_error: {mean_absolute_error}")
     print(f"mean_error: {mean_error}")
+    print("####################")
     log_metric("mean_kl_divergence", mean_kl_divergence)
     log_metric("mean_absolute_error", mean_absolute_error)
     log_metric("mean_error", mean_error)
