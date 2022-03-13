@@ -244,7 +244,7 @@ def custom_evaluate_voting(top_k, rating_matrix, distance_matrix, users_viewed_i
     normalized_per_user_diversity = []
     normalized_per_user_novelty = []
 
-    normalized_per_user_mer_matrix = mer_norm(np.sum(np.take_along_axis(rating_matrix, top_k, axis=1) * discount_sequences[0], axis=1, keepdims=True).T / discount_sequences[0].sum(), ignore_shift=True).T
+    normalized_per_user_mer_matrix = mer_norm(np.sum(np.take_along_axis(rating_matrix, top_k, axis=1) * discount_sequences[0], axis=1, keepdims=True).T / discount_sequences[0].sum(), ignore_shift=False).T
     
     total_mer = 0.0
     total_novelty = 0.0
@@ -269,12 +269,12 @@ def custom_evaluate_voting(top_k, rating_matrix, distance_matrix, users_viewed_i
         ranking_distances = distance_matrix[np.ix_(user_ranking, user_ranking)] * div_discount
         triu_indices = np.triu_indices(user_ranking.size, k=1)
         ranking_distances_mean = ranking_distances[triu_indices].sum() / div_discount[triu_indices].sum()
-        normalized_ranking_distances_mean = div_norm([[ranking_distances_mean]], ignore_shift=True)
+        normalized_ranking_distances_mean = div_norm([[ranking_distances_mean]], ignore_shift=False)
         normalized_per_user_diversity.append(normalized_ranking_distances_mean.item())
         normalized_diversity += normalized_per_user_diversity[-1]
 
         # Per user novelty
-        normalized_per_user_novelty.append(nov_norm(((1.0 - users_viewed_item[user_ranking] / num_users) * discount_sequences[2]).sum().reshape(-1, 1) / discount_sequences[2].sum(), ignore_shift=True).item())
+        normalized_per_user_novelty.append(nov_norm(((1.0 - users_viewed_item[user_ranking] / num_users) * discount_sequences[2]).sum().reshape(-1, 1) / discount_sequences[2].sum(), ignore_shift=False).item())
         normalized_novelty += normalized_per_user_novelty[-1]
         
         per_user_mer.append(relevance)
