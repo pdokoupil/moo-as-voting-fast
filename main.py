@@ -121,6 +121,14 @@ def get_baseline(args, baseline_factory):
         unseen_items_mask = np.ones((num_users, num_items), dtype=np.bool8)
         unseen_items_mask[baseline.matrix > 0.0] = 0 # Mask out already seem items
 
+        if baseline_factory == ItemKNN:
+            print("Injecting into ItemKNN")
+            def predict_score_wrapper(u_id, i_id):
+                res = baseline.predict_scores(user_id_to_user[u_id], [item_id_to_item[i_id]])
+                print(f"Predicting: {res}")
+                return res
+            setattr(baseline, "_predict_score", predict_score_wrapper)
+
         extended_rating_matrix = baseline.matrix.copy()
         for u_id in range(extended_rating_matrix.shape[0]):
             for i_id in range(extended_rating_matrix.shape[1]):
