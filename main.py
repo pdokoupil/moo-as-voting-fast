@@ -144,8 +144,7 @@ def get_baseline(args, baseline_factory):
         if baseline_factory == ItemKNN:
             print("Injecting into ItemKNN")
             def predict_score_wrapper(u_id, i_id):
-                res = baseline.predict_scores(user_id_to_user[u_id], [item_id_to_item[i_id]])
-                print(f"Predicting: {res}")
+                _, _, res = baseline.predict_scores(user_id_to_user[u_id], [item_id_to_item[i_id]])[0]
                 return res
             setattr(baseline, "_predict_score", predict_score_wrapper)
 
