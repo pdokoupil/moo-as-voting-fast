@@ -104,7 +104,12 @@ def get_baseline(args, baseline_factory):
 
         BaseRatingPrediction.compute(baseline)
         baseline.init_model()
-        baseline.fit()
+        if hasattr(baseline, "fit"):
+            baseline.fit()
+        elif hasattr(baseline, "train_baselines"):
+            baseline.train_baselines()
+        else:
+            assert False, "Fit/train_baselines not found for baseline"
         baseline.create_matrix()
         similarity_matrix = baseline.compute_similarity(transpose=True)
 
