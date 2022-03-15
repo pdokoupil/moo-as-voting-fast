@@ -5,6 +5,7 @@ import random
 import time
 
 import mlflow
+RUN_ID = os.environ[mlflow.tracking._RUN_ID_ENV_VAR] if mlflow.tracking._RUN_ID_ENV_VAR in os.environ else None
 
 import glob
 
@@ -459,9 +460,8 @@ def main(args):
     results = custom_evaluate_voting(users_partial_lists, extended_rating_matrix, distance_matrix, users_viewed_item, normalizations, obj_weights, args.discount_sequences)
 
     if args.artifact_dir:
-        run_id = get_run_id()
-        print(f"Saving artifacts, run_id: {run_id}")
-        results_path = os.path.join(args.artifact_dir, f"{run_id}_results.pckl")
+        print(f"Saving artifacts, run_id: {RUN_ID}")
+        results_path = os.path.join(args.artifact_dir, f"{RUN_ID}_results.pckl")
         print(f"Saving results to artifact dir: {args.artifact_dir} as {results_path}")
         results["top-k-lists"] = users_partial_lists.tolist()
         results["item-id-to-item"] = item_id_to_item
@@ -470,13 +470,10 @@ def main(args):
         results["user-id-to-user"] = user_id_to_user
         results["user-to-user-id"] = user_to_user_id
         save_cache(results_path, results)
-        for artifact_path in glob.glob(os.path.join(args.artifact_dir, f"*{run_id}*")):
+        for artifact_path in glob.glob(os.path.join(args.artifact_dir, f"*{RUN_ID}*")):
             print(f"Logging artifact: {artifact_path}")
             log_artifact(artifact_path)
         #log_artifacts(args.artifact_dir)
-
-def get_run_id():
-    return os.environ[mlflow.tracking._RUN_ID_ENV_VAR] if mlflow.tracking._RUN_ID_ENV_VAR in os.environ else None
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -504,13 +501,12 @@ if __name__ == "__main__":
 
     if not args.artifact_dir:
         print("Artifact directory is not specified, trying to set it")
-        run_id = get_run_id()
-        if not run_id:
+        if not RUN_ID:
             print("Not inside mlflow's run, leaving artifact directory empty")
         else:
-            print(f"Inside mlflow's run {run_id} setting artifact directory")
+            print(f"Inside mlflow's run {RUN_ID} setting artifact directory")
             if args.output_path_prefix:
-                args.artifact_dir = os.path.join(args.output_path_prefix, run_id)
+                args.artifact_dir = os.path.join(args.output_path_prefix, RUN_ID)
                 print(f"Set artifact directory to: {args.artifact_dir}")
             else:
                 print("Output path prefix is not set, skipping setting of artifact directory")
