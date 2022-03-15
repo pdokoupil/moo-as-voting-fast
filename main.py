@@ -6,6 +6,8 @@ import time
 
 import mlflow
 
+import glob
+
 import numpy as np
 
 from scipy.spatial.distance import squareform, pdist
@@ -98,6 +100,8 @@ def get_baseline(args, baseline_factory):
         similarity_matrix = cache["similarity_matrix"]
         unseen_items_mask = cache["unseen_items_mask"]
         test_set_users_start_index = cache["test_set_users_start_index"]
+        user_to_user_id = cache["user_to_user_id"]
+        user_id_to_user = cache["user_id_to_user"]
     else:
         print(f"Calculating baseline '{baseline_factory.__name__}'")
         baseline = baseline_factory(args.train_path)
@@ -185,7 +189,9 @@ def get_baseline(args, baseline_factory):
                 "extended_rating_matrix": extended_rating_matrix,
                 "similarity_matrix": similarity_matrix,
                 "unseen_items_mask": unseen_items_mask,
-                "test_set_users_start_index": test_set_users_start_index
+                "test_set_users_start_index": test_set_users_start_index,
+                "user_to_user_id": user_to_user_id,
+                "user_id_to_user": user_id_to_user
             }
             save_cache(cache_path, cache)
 
@@ -198,7 +204,8 @@ def get_baseline(args, baseline_factory):
         users_viewed_item, item_to_item_id, \
         item_id_to_item, extended_rating_matrix, \
         similarity_matrix, unseen_items_mask, \
-        test_set_users_start_index, metadata_distance_matrix
+        test_set_users_start_index, metadata_distance_matrix, \
+        user_id_to_user, user_to_user_id
 
 def build_normalization(normalization_factory, shift):
     if shift:
@@ -353,6 +360,29 @@ def custom_evaluate_voting(top_k, rating_matrix, distance_matrix, users_viewed_i
     log_metric("mean_error", mean_error)
 
     print(f"Evaluation took: {time.perf_counter() - start_time}")
+    return {
+        "mer": total_mer,
+        "diversity": total_diversity,
+        "novelty": total_novelty,
+        "per-user-mer": per_user_mer,
+        "per-user-diversity": per_user_diversity,
+        "per-user-novelty": per_user_novelty,
+        "normalized-mer": normalized_mer,
+        "normalized-diversity": normalized_diversity,
+        "normalized-novelty": normalized_novelty,
+        "normalized-per-user-mer": normalized_per_user_mer,
+        "normalized-per-user-diversity": normalized_per_user_diversity,
+        "normalized-per-user-novelty": normalized_per_user_novelty,
+        "mean-kl-divergence": mean_kl_divergence,
+        "mean-absolute-error": mean_absolute_error,
+        "mean-error": mean_error,
+        "sum-to-1-normalized-mer": normalized_mer / s,
+        "sum-to-1-normalized-diversity": normalized_diversity / s,
+        "sum-to-1-normalized-novelty": normalized_novelty / s,
+        "per-user-kl-divergence": per_user_kl_divergence,
+        "per-user-mean-absolute-errors": per_user_mean_absolute_errors,
+        "per-user-errors": per_user_errors
+    }
 
 def main(args):
     for arg_name in dir(args):
@@ -370,7 +400,7 @@ def main(args):
     algorithm_factory = globals()[args.algorithm]
     print(f"Using '{args.algorithm}' algorithm")
 
-    items, users, users_viewed_item, item_to_item_id, item_id_to_item, extended_rating_matrix, similarity_matrix, unseen_items_mask, test_set_users_start_index, metadata_distance_matrix = get_baseline(args, globals()[args.baseline])
+    items, users, users_viewed_item, item_to_item_id, item_id_to_item, extended_rating_matrix, similarity_matrix, unseen_items_mask, test_set_users_start_index, metadata_distance_matrix, user_id_to_user, user_to_user_id = get_baseline(args, globals()[args.baseline])
     if args.diversity == "cb":
         print("Using content based diversity")
         assert args.metadata_path, "Metadata path must be specified when using cb diversity"
@@ -426,10 +456,27 @@ def main(args):
     mapped_lists = np.fromiter(map(item_id_to_item.__getitem__, users_partial_lists.flatten()), dtype=np.int32).reshape(users_partial_lists.shape).tolist()
     print(f"Mapped lists: {mapped_lists}")
 
-    custom_evaluate_voting(users_partial_lists, extended_rating_matrix, distance_matrix, users_viewed_item, normalizations, obj_weights, args.discount_sequences)
+    results = custom_evaluate_voting(users_partial_lists, extended_rating_matrix, distance_matrix, users_viewed_item, normalizations, obj_weights, args.discount_sequences)
 
     if args.artifact_dir:
-        log_artifacts(args.artifact_dir)
+        run_id = get_run_id()
+        print(f"Saving artifacts, run_id: {run_id}")
+        results_path = os.path.join(args.artifact_dir, f"{run_id}_results.pckl")
+        print(f"Saving results to artifact dir: {args.artifact_dir} as {results_path}")
+        results["top-k-lists"] = users_partial_lists.tolist()
+        results["item-id-to-item"] = item_id_to_item
+        results["item-to-item-id"] = item_to_item_id
+        results["top-k-lists-mapped"] = mapped_lists
+        results["user-id-to-user"] = user_id_to_user
+        results["user-to-user-id"] = user_to_user_id
+        save_cache(results_path, results)
+        for artifact_path in glob.glob(os.path.join(args.artifact_dir, f"*{run_id}*")):
+            print(f"Logging artifact: {artifact_path}")
+            log_artifact(artifact_path)
+        #log_artifacts(args.artifact_dir)
+
+def get_run_id():
+    return os.environ[mlflow.tracking._RUN_ID_ENV_VAR] if mlflow.tracking._RUN_ID_ENV_VAR in os.environ else None
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -457,7 +504,7 @@ if __name__ == "__main__":
 
     if not args.artifact_dir:
         print("Artifact directory is not specified, trying to set it")
-        run_id = os.environ[mlflow.tracking._RUN_ID_ENV_VAR] if mlflow.tracking._RUN_ID_ENV_VAR in os.environ else None
+        run_id = get_run_id()
         if not run_id:
             print("Not inside mlflow's run, leaving artifact directory empty")
         else:
