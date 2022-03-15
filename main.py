@@ -469,6 +469,7 @@ def main(args):
         results["top-k-lists-mapped"] = mapped_lists
         results["user-id-to-user"] = user_id_to_user
         results["user-to-user-id"] = user_to_user_id
+        results["args"] = args
         save_cache(results_path, results)
         for artifact_path in glob.glob(os.path.join(args.artifact_dir, f"*{RUN_ID}*")):
             print(f"Logging artifact: {artifact_path}")
