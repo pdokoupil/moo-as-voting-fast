@@ -215,7 +215,7 @@ def build_normalization(normalization_factory, shift):
         return normalization_factory()
 
 def prepare_normalization(args, normalization_factory, rating_matrix, distance_matrix, users_viewed_item, shift):
-    cache_path = os.path.join(args.cache_dir, f"sup_norm_{normalization_factory.__name__}_{shift}_{args.seed}.pckl")
+    cache_path = os.path.join(args.cache_dir, f"sup_norm_{normalization_factory.__name__}_{shift}_{args.seed}_{args.baseline}_{args.diversity}.pckl")
     if args.cache_dir and os.path.exists(cache_path):
         cache = load_cache(cache_path)
         norm_relevance = cache["norm_relevance"]
