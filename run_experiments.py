@@ -58,7 +58,7 @@ if __name__ == "__main__":
     parser.add_argument("--algorithms")
     parser.add_argument("--train_path")
     parser.add_argument("--test_path")
-    parser.add_argument("--metadata_path")
+    parser.add_argument("--metadata_path", type=str, default="")
     parser.add_argument("--baselines")
     parser.add_argument("--diversities")
     parser.add_argument("--cache_dir", type=str)
