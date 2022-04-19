@@ -114,3 +114,5 @@ You can run it as *mlflow server* and then run the commands above. Also note tha
 ### Results
 All the results can be found at the following address:
 
+### Final note about implementation
+More generic and customizable implementation can be found in the following repository https://github.com/pdokoupil/moo-as-voting It should be mentioned that the previously mentioned implementation was not used to generate the results available in the paper. Also note that although that implementation is more generic, it is significantly slower compared to the current implementation.
